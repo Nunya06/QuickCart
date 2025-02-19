@@ -1,8 +1,10 @@
 'use client'
 import { productsDummyData, userDummyData } from "@/assets/assets";
-import { useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useState } from "react";
+import toast from "react-hot-toast";
 
 export const AppContext = createContext();
 
@@ -15,22 +17,58 @@ export const AppContextProvider = (props) => {
     const currency = process.env.NEXT_PUBLIC_CURRENCY
     const router = useRouter()
 
-    // API to get and display user data after login
+    // API to get and display user data after login in the login section
     const {user} = useUser()
+
+    // Backend connection to frontend 
+    const {getToken} = useAuth()
 
     const [products, setProducts] = useState([])
     const [userData, setUserData] = useState(false)
-    const [isSeller, setIsSeller] = useState(true)
+    const [isSeller, setIsSeller] = useState(false)
     const [cartItems, setCartItems] = useState({})
 
+    // Function to fetch product data from database and display on frontend
     const fetchProductData = async () => {
-        setProducts(productsDummyData)
+        // API call
+        try {
+            const {data} = await axios.get('/api/product/list')
+
+            if (data.success) {
+                setProducts(data.products)
+            }else{
+                toast.error(data.message)
+            }
+
+        } catch (error) {
+            toast.error(error.message)
+        }
     }
 
+    // Fuction to check user role and assign pages and also call api
     const fetchUserData = async () => {
-        setUserData(userDummyData)
+        try{
+            if (user.publicMetadata.role === 'seller'){
+                setIsSeller(true)
+            }
+            const token = await getToken()
+
+            const {data} = await axios.get('/api/user/data', {headers: {Authorization: `Bearer ${token}`}})
+
+            if (data.success){
+                setUserData(data.user)
+                setCartItems(data.user.cartItems)
+            } else{
+                toast.error(data.message)
+            }
+
+        } catch (error){
+            toast.error(error.message)
+        }
+       
     }
 
+    // Function to add product to cart
     const addToCart = async (itemId) => {
 
         let cartData = structuredClone(cartItems);
@@ -41,9 +79,21 @@ export const AppContextProvider = (props) => {
             cartData[itemId] = 1;
         }
         setCartItems(cartData);
+        
+
+        if (user) {
+            try {
+                const token = await getToken()
+                await axios.post('/api/cart/update', {cartData},{headers: {Authorization: `Bearer ${token}`}})
+                toast.success("Item added to cart")
+            } catch (error) {
+                toast.error(error.message)
+            }
+        }
 
     }
 
+    // Function to update cart quantity
     const updateCartQuantity = async (itemId, quantity) => {
 
         let cartData = structuredClone(cartItems);
@@ -53,6 +103,17 @@ export const AppContextProvider = (props) => {
             cartData[itemId] = quantity;
         }
         setCartItems(cartData)
+
+        if (user) {
+            try {
+                const token = await getToken()
+                await axios.post('/api/cart/update', {cartData},{headers: {Authorization: `Bearer ${token}`}})
+                toast.success("Item updated")
+            } catch (error) {
+                toast.error(error.message)
+            }
+        }
+
 
     }
 
@@ -81,12 +142,16 @@ export const AppContextProvider = (props) => {
         fetchProductData()
     }, [])
 
+
+    // UseEffect for the role assignment
     useEffect(() => {
-        fetchUserData()
-    }, [])
+        if (user){
+            fetchUserData()
+        } 
+    }, [user])
 
     const value = {
-        user,
+        user, getToken,
         currency, router,
         isSeller, setIsSeller,
         userData, fetchUserData,
