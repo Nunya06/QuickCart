@@ -1,4 +1,4 @@
-import connectDB from "@/config/db";
+
 import { getAuth} from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import Product from "@/models/Product";
@@ -15,11 +15,10 @@ export async function POST(request){
             return NextResponse.json({success:false, message:"Invalid data"})
 
         }
-
         // Calculate amount 
         const amount = await items.reduce(async (acc, item) =>{
             const product = await Product.findById(item.product);
-            return acc + product.offerPrice * item.quantity;
+            return await acc + product.offerPrice * item.quantity;
         },0)
 
         await inngest.send({
@@ -36,7 +35,7 @@ export async function POST(request){
         // Clear user cart after order is placed
         const user = await User.findById(userId)
         user.cartItems = {}
-        awaituser.save()
+        await user.save()
 
        return  NextResponse.json({success: true, message:"Order Placed"});
 
